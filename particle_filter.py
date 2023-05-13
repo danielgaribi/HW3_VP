@@ -40,9 +40,7 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
         state_drifted: np.ndarray. The prior state after drift (applying the motion model) and adding the noise.
     """
     s_prior = s_prior.astype(float)
-    state_drifted = s_prior
-    """ DELETE THE LINE ABOVE AND:
-    INSERT YOUR CODE HERE."""
+    state_drifted = s_prior + np.random.normal(0, 0.5, s_prior.shape) #TODO: check noise
     state_drifted = state_drifted.astype(int)
     return state_drifted
 
@@ -59,9 +57,22 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
     """
     state = np.floor(state)
     state = state.astype(int)
-    hist = np.zeros(1, 16 * 16 * 16)
-    """ DELETE THE LINE ABOVE AND:
-        INSERT YOUR CODE HERE."""
+
+    # crop image
+    x, y, w, h = state[0], state[1], state[2], state[3]
+    cropped_image = image[y-h:y+h, x-w:x+w, :]
+
+    # quantize colors
+    cropped_image = np.floor(cropped_image/16)
+    cropped_image = cropped_image.astype(int)
+
+    # compute histogram
+    hist = np.zeros((16, 16, 16))
+    for i in range(cropped_image.shape[0]):
+        for j in range(cropped_image.shape[1]):
+            hist[cropped_image[i, j, 0], cropped_image[i, j, 1], cropped_image[i, j, 2]] += 1
+
+    # reshape to vector
     hist = np.reshape(hist, 16 * 16 * 16)
 
     # normalize
