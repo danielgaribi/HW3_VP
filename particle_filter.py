@@ -8,7 +8,7 @@ import matplotlib.patches as patches
 
 
 # change IDs to your IDs.
-ID1 = "123456789"
+ID1 = "208687129"
 ID2 = "987654321"
 
 ID = "HW3_{0}_{1}".format(ID1, ID2)
@@ -40,7 +40,13 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
         state_drifted: np.ndarray. The prior state after drift (applying the motion model) and adding the noise.
     """
     s_prior = s_prior.astype(float)
-    state_drifted = s_prior + np.random.normal(0, 0.5, s_prior.shape) #TODO: check noise
+    
+    # velocities vector to add to the state vector
+    velocity_addition = np.zeros_like(s_prior)
+    velocity_addition[0] = s_prior[-2]
+    velocity_addition[1] = s_prior[-1]
+    
+    state_drifted = s_prior + velocity_addition + np.random.normal(0, 0.5, s_prior.shape) #TODO: check noise
     state_drifted = state_drifted.astype(int)
     return state_drifted
 
@@ -55,7 +61,7 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
     Return:
         hist: np.ndarray. histogram of quantized colors.
     """
-    state = np.floor(state)
+    state = np.floor(state) # TODO: why is this done?
     state = state.astype(int)
 
     # crop image
@@ -94,8 +100,13 @@ def sample_particles(previous_state: np.ndarray, cdf: np.ndarray) -> np.ndarray:
         s_next: np.ndarray. Sampled particles. shape: (6, N)
     """
     S_next = np.zeros(previous_state.shape)
-    """ DELETE THE LINE ABOVE AND:
-        INSERT YOUR CODE HERE."""
+    N = previous_state.shape[1]
+    
+    for n in range(N):
+        r = np.random.random()
+        j = np.argmin(cdf >= r)
+        S_next[:, n] = previous_state[:, j]
+    
     return S_next
 
 
@@ -109,9 +120,8 @@ def bhattacharyya_distance(p: np.ndarray, q: np.ndarray) -> float:
     Return:
         distance: float. The Bhattacharyya Distance.
     """
-    distance = 0
-    """ DELETE THE LINE ABOVE AND:
-        INSERT YOUR CODE HERE."""
+    power = 20 * np.sum(np.sqrt(p * q))
+    distance = np.exp(power)
     return distance
 
 
@@ -124,19 +134,14 @@ def show_particles(image: np.ndarray, state: np.ndarray, W: np.ndarray, frame_in
     plt.title(ID + " - Frame mumber = " + str(frame_index))
 
     # Avg particle box
-    (x_avg, y_avg, w_avg, h_avg) = (0, 0, 0, 0)
-    """ DELETE THE LINE ABOVE AND:
-        INSERT YOUR CODE HERE."""
-
+    (x_avg, y_avg, w_avg, h_avg) = np.average(state, axis=1).T 
 
     rect = patches.Rectangle((x_avg, y_avg), w_avg, h_avg, linewidth=1, edgecolor='g', facecolor='none')
     ax.add_patch(rect)
 
     # calculate Max particle box
-    (x_max, y_max, w_max, h_max) = (0, 0, 0, 0)
-    """ DELETE THE LINE ABOVE AND:
-        INSERT YOUR CODE HERE."""
-
+    (x_max, y_max, w_max, h_max) = np.max(state, axis=1).T
+    
     rect = patches.Rectangle((x_max, y_max), w_max, h_max, linewidth=1, edgecolor='r', facecolor='none')
     ax.add_patch(rect)
     plt.show(block=False)
@@ -157,10 +162,17 @@ def main():
     # COMPUTE NORMALIZED HISTOGRAM
     q = compute_normalized_histogram(image, s_initial)
 
-    # COMPUTE NORMALIZED WEIGHTS (W) AND PREDICTOR CDFS (C)
-    # YOU NEED TO FILL THIS PART WITH CODE:
-    """INSERT YOUR CODE HERE."""
-
+    # COMPUTE NORMALIZED WEIGHTS
+    W = np.zeros(S.shape[1]) # initialize weights
+    for i in range(S.shape[1]): # go through columns of S
+        p = compute_normalized_histogram(image, S[:, i].T)
+        W[i] = bhattacharyya_distance(p, q)
+    # normalize the vector w
+    W = W / np.sum(W)
+    
+    # COMPUTE PREDICTOR CDFS (C)
+    C = np.cumsum(W)
+        
     images_processed = 1
 
     # MAIN TRACKING LOOP
@@ -179,12 +191,19 @@ def main():
         # SAMPLE THE CURRENT PARTICLE FILTERS
         S_next_tag = sample_particles(S_prev, C)
 
-        # PREDICT THE NEXT PARTICLE FILTERS (YOU MAY ADD NOISE
-        S = predict_particles(S_next_tag)
+        # PREDICT THE NEXT PARTICLE FILTERS (YOU MAY ADD NOISE)
+        S = predict_particles(S_next_tag) 
 
-        # COMPUTE NORMALIZED WEIGHTS (W) AND PREDICTOR CDFS (C)
-        # YOU NEED TO FILL THIS PART WITH CODE:
-        """INSERT YOUR CODE HERE."""
+        # COMPUTE NORMALIZED WEIGHTS
+        W = np.zeros(S.shape[1]) # initialize weights
+        for i in range(S.shape[1]): # go through columns of S
+            p = compute_normalized_histogram(image, S[:, i].T)
+            W[i] = bhattacharyya_distance(p, q)
+        # normalize the vector w
+        W = W / np.sum(W)
+    
+        # COMPUTE PREDICTOR CDFS (C)
+        C = np.cumsum(W)
 
         # CREATE DETECTOR PLOTS
         images_processed += 1
