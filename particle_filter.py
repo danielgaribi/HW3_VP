@@ -5,6 +5,8 @@ import numpy as np
 import numpy.matlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from PIL import Image #TODO delete
+import bisect
 
 
 # change IDs to your IDs.
@@ -46,7 +48,23 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     velocity_addition[0] = s_prior[-2]
     velocity_addition[1] = s_prior[-1]
     
-    state_drifted = s_prior + velocity_addition + np.random.normal(0, 0.5, s_prior.shape) #TODO: check noise
+    state_drifted = s_prior + velocity_addition 
+    
+    #generate noise
+    mean = 0
+    var_coordinates = 0.5
+    var_velocity = 0.05
+    noise_x = np.random.normal(mean, var_coordinates, N)
+    noise_y = np.random.normal(mean, var_coordinates, N)
+    noise_vx = np.random.normal(mean, var_velocity, N)
+    noise_vy = np.random.normal(mean, var_velocity, N)
+    
+    #add noise
+    state_drifted[0,:] += noise_x
+    state_drifted[1,:] += noise_y
+    state_drifted[4,:] += noise_vx
+    state_drifted[5,:] += noise_vy
+    
     state_drifted = state_drifted.astype(int)
     return state_drifted
 
@@ -61,12 +79,12 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
     Return:
         hist: np.ndarray. histogram of quantized colors.
     """
-    state = np.floor(state) # TODO: why is this done?
+    state = np.floor(state) 
     state = state.astype(int)
 
     # crop image
     x, y, w, h = state[0], state[1], state[2], state[3]
-    cropped_image = image[y-h:y+h, x-w:x+w, :]
+    cropped_image = image[max(y-h,0):min(y+h,image.shape[0]), max(x-w,0):min(x+w, image.shape[1]), :]
 
     # quantize colors
     cropped_image = np.floor(cropped_image/16)
@@ -82,9 +100,12 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
     hist = np.reshape(hist, 16 * 16 * 16)
 
     # normalize
-    hist = hist/sum(hist)
+    if sum(hist) > 0 : 
+        hist = hist/sum(hist)
 
     return hist
+
+
 
 
 def sample_particles(previous_state: np.ndarray, cdf: np.ndarray) -> np.ndarray:
@@ -104,7 +125,8 @@ def sample_particles(previous_state: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     
     for n in range(N):
         r = np.random.random()
-        j = np.argmin(cdf >= r)
+        j = np.argmax(cdf >= r)
+        #j = bisect.bisect(cdf, r) TODO delete
         S_next[:, n] = previous_state[:, j]
     
     return S_next
@@ -134,13 +156,13 @@ def show_particles(image: np.ndarray, state: np.ndarray, W: np.ndarray, frame_in
     plt.title(ID + " - Frame mumber = " + str(frame_index))
 
     # Avg particle box
-    (x_avg, y_avg, w_avg, h_avg) = np.average(state, axis=1).T 
+    (x_avg, y_avg, w_avg, h_avg) = np.average(state, axis=1,weights=W).T[:4]
 
     rect = patches.Rectangle((x_avg, y_avg), w_avg, h_avg, linewidth=1, edgecolor='g', facecolor='none')
     ax.add_patch(rect)
 
     # calculate Max particle box
-    (x_max, y_max, w_max, h_max) = np.max(state, axis=1).T
+    (x_max, y_max, w_max, h_max) = np.max(state, axis=1).T[:4]
     
     rect = patches.Rectangle((x_max, y_max), w_max, h_max, linewidth=1, edgecolor='r', facecolor='none')
     ax.add_patch(rect)
@@ -158,7 +180,9 @@ def main():
 
     # LOAD FIRST IMAGE
     image = cv2.imread(os.path.join(IMAGE_DIR_PATH, "001.png"))
-
+    #img = Image.open(os.path.join(IMAGE_DIR_PATH, "001.png"))
+    #image = np.array(img)
+    
     # COMPUTE NORMALIZED HISTOGRAM
     q = compute_normalized_histogram(image, s_initial)
 
