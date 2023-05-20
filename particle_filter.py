@@ -52,8 +52,8 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     
     #generate noise
     mean = 0
-    var_coordinates = 0.5
-    var_velocity = 0.05
+    var_coordinates = 2
+    var_velocity = 1
     noise_x = np.random.normal(mean, var_coordinates, N)
     noise_y = np.random.normal(mean, var_coordinates, N)
     noise_vx = np.random.normal(mean, var_velocity, N)
@@ -104,9 +104,6 @@ def compute_normalized_histogram(image: np.ndarray, state: np.ndarray) -> np.nda
         hist = hist/sum(hist)
 
     return hist
-
-
-
 
 def sample_particles(previous_state: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     """Sample particles from the previous state according to the cdf.
@@ -162,7 +159,8 @@ def show_particles(image: np.ndarray, state: np.ndarray, W: np.ndarray, frame_in
     ax.add_patch(rect)
 
     # calculate Max particle box
-    (x_max, y_max, w_max, h_max) = np.max(state, axis=1).T[:4]
+    max_w = np.argmax(W)
+    (x_max, y_max, w_max, h_max) = state[:,max_w].T[:4]
     
     rect = patches.Rectangle((x_max, y_max), w_max, h_max, linewidth=1, edgecolor='r', facecolor='none')
     ax.add_patch(rect)
@@ -173,6 +171,16 @@ def show_particles(image: np.ndarray, state: np.ndarray, W: np.ndarray, frame_in
     frame_index_to_max_state[frame_index] = [float(x) for x in [x_max, y_max, w_max, h_max]]
     return frame_index_to_mean_state, frame_index_to_max_state
 
+def computer_normalized_weights(image: np.ndarray, state: np.ndarray, q: np.ndarray) -> np.ndarray:
+    w = np.zeros(state.shape[1]) # initialize weights
+    for i in range(state.shape[1]): # go through columns of S
+        p = compute_normalized_histogram(image, state[:, i].flatten())
+        w[i] = bhattacharyya_distance(p, q)
+
+    # normalize the vector w
+    w = w / np.sum(w)
+
+    return w
 
 def main():
     state_at_first_frame = np.matlib.repmat(s_initial, N, 1).T
@@ -180,23 +188,16 @@ def main():
 
     # LOAD FIRST IMAGE
     image = cv2.imread(os.path.join(IMAGE_DIR_PATH, "001.png"))
-    #img = Image.open(os.path.join(IMAGE_DIR_PATH, "001.png"))
-    #image = np.array(img)
     
     # COMPUTE NORMALIZED HISTOGRAM
     q = compute_normalized_histogram(image, s_initial)
 
     # COMPUTE NORMALIZED WEIGHTS
-    W = np.zeros(S.shape[1]) # initialize weights
-    for i in range(S.shape[1]): # go through columns of S
-        p = compute_normalized_histogram(image, S[:, i].T)
-        W[i] = bhattacharyya_distance(p, q)
-    # normalize the vector w
-    W = W / np.sum(W)
-    
+    W = computer_normalized_weights(image, S, q)
+        
     # COMPUTE PREDICTOR CDFS (C)
     C = np.cumsum(W)
-        
+            
     images_processed = 1
 
     # MAIN TRACKING LOOP
@@ -217,14 +218,9 @@ def main():
 
         # PREDICT THE NEXT PARTICLE FILTERS (YOU MAY ADD NOISE)
         S = predict_particles(S_next_tag) 
-
+        
         # COMPUTE NORMALIZED WEIGHTS
-        W = np.zeros(S.shape[1]) # initialize weights
-        for i in range(S.shape[1]): # go through columns of S
-            p = compute_normalized_histogram(image, S[:, i].T)
-            W[i] = bhattacharyya_distance(p, q)
-        # normalize the vector w
-        W = W / np.sum(W)
+        W = computer_normalized_weights(current_image, S, q)
     
         # COMPUTE PREDICTOR CDFS (C)
         C = np.cumsum(W)
@@ -239,7 +235,6 @@ def main():
         json.dump(frame_index_to_avg_state, f, indent=4)
     with open(os.path.join(RESULTS, 'frame_index_to_max_state.json'), 'w') as f:
         json.dump(frame_index_to_max_state, f, indent=4)
-
 
 if __name__ == "__main__":
     main()
