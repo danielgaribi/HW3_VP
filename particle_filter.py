@@ -54,14 +54,19 @@ def predict_particles(s_prior: np.ndarray) -> np.ndarray:
     mean = 0
     var_coordinates = 2
     var_velocity = 1
+    var_w_h = 1
     noise_x = np.random.normal(mean, var_coordinates, N)
     noise_y = np.random.normal(mean, var_coordinates, N)
+    noise_w = np.random.normal(mean, var_w_h, N)
+    noise_h = np.random.normal(mean, var_w_h, N)
     noise_vx = np.random.normal(mean, var_velocity, N)
     noise_vy = np.random.normal(mean, var_velocity, N)
     
     #add noise
     state_drifted[0,:] += noise_x
     state_drifted[1,:] += noise_y
+    state_drifted[2,:] += noise_w
+    state_drifted[3,:] += noise_h
     state_drifted[4,:] += noise_vx
     state_drifted[5,:] += noise_vy
     
@@ -123,7 +128,6 @@ def sample_particles(previous_state: np.ndarray, cdf: np.ndarray) -> np.ndarray:
     for n in range(N):
         r = np.random.random()
         j = np.argmax(cdf >= r)
-        #j = bisect.bisect(cdf, r) TODO delete
         S_next[:, n] = previous_state[:, j]
     
     return S_next
